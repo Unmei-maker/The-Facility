@@ -1,0 +1,99 @@
+--[[
+	EchoSetup.server.lua
+	Wires PlayerProfile tracking + EchoAI into a basic team radio system.
+
+	Setup expected in Studio:
+	- A RemoteEvent named "RadioMessage" under ReplicatedStorage (create it
+	  if it doesn't exist -- this script will also create it automatically).
+	- Your chat UI listens for RadioMessage:OnClientEvent(speakerName, text)
+	  and displays it exactly like a normal teammate message. The client
+	  should have NO way to know whether a given message came from a real
+	  player or from ECHO -- that ambiguity IS the mechanic.
+
+	IMPORTANT: never fire anything containing `isFake` to the client.
+	This script strips it before broadcasting.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local PlayerProfile = require(ReplicatedStorage.Modules.PlayerProfile)
+local EchoAI = require(ReplicatedStorage.Modules.EchoAI)
+
+-- Create (or find) the RemoteEvent used for radio/chat messages.
+local radioEvent = ReplicatedStorage:FindFirstChild("RadioMessage")
+if not radioEvent then
+	radioEvent = Instance.new("RemoteEvent")
+	radioEvent.Name = "RadioMessage"
+	radioEvent.Parent = ReplicatedStorage
+end
+
+-- ============================================================
+-- Track every player who joins
+-- ============================================================
+
+local function onPlayerAdded(player)
+	PlayerProfile.StartTracking(player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+for _, player in ipairs(Players:GetPlayers()) do
+	onPlayerAdded(player)
+end
+
+-- Tick observation time for everyone every frame.
+
+RunService.Heartbeat:Connect(function(dt)
+	for _, player in ipairs(Players:GetPlayers()) do
+		PlayerProfile.Tick(player, dt)
+	end
+end)
+
+-- ============================================================
+-- Real player messages: record them AND broadcast them normally
+-- ============================================================
+
+-- Assumes clients fire a "SendRadioMessage" RemoteEvent when a player types
+-- into the team radio UI. Create that RemoteEvent the same way as above.
+
+local sendEvent = ReplicatedStorage:FindFirstChild("SendRadioMessage")
+if not sendEvent then
+	sendEvent = Instance.new("RemoteEvent")
+	sendEvent.Name = "SendRadioMessage"
+	sendEvent.Parent = ReplicatedStorage
+end
+
+sendEvent.OnServerEvent:Connect(function(player, rawMessage)
+	if typeof(rawMessage) ~= "string" then return end
+
+	-- Basic sanitation -- trim length, strip control chars, etc.
+	local message = rawMessage:sub(1, 200)
+
+	PlayerProfile.RecordChatMessage(player, message)
+
+	-- Broadcast the real message to everyone.
+	radioEvent:FireAllClients(player.Name, message)
+end)
+
+-- ============================================================
+-- ECHO: fires fake messages through the exact same broadcast path
+-- ============================================================
+
+local echo = EchoAI.new({ difficulty = "Nightmare" })
+
+echo.onFakeMessage = function(_, fakingPlayer, fakeMessage, hadTell)
+	-- Server-side log for debugging/balancing -- NOT sent to clients.
+	print(("[ECHO] Impersonating %s (tell=%s): %s"):format(
+		fakingPlayer.Name, tostring(hadTell), fakeMessage.text
+	))
+
+	-- Broadcast using the exact same event/shape as a real message, so
+	-- there is nothing for the client to distinguish it by.
+  
+	radioEvent:FireAllClients(fakeMessage.speakerName, fakeMessage.text)
+end
+
+echo:Start()
+
+print("ECHO impersonation system initialized.")
