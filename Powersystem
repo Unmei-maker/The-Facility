@@ -1,0 +1,188 @@
+--[[
+	PowerSystem.lua
+	Tracks the facility's shared auxiliary battery, passive recovery,
+	emergency CCTV lockdown recovery, and cascading system failures
+	(design doc Sections 8, 9, 10).
+
+	This is a singleton module (not a class you instantiate) since there's
+	one shared battery for the whole facility/server.
+
+	Usage:
+		local PowerSystem = require(ReplicatedStorage.Modules.PowerSystem)
+		PowerSystem.Init("Nightmare")
+		PowerSystem.SetElectronicsActive(true)  -- e.g. while CCTV is in use
+		PowerSystem.Drain(10)                   -- e.g. Generator B fails
+		local level = PowerSystem.GetLevel()     -- 0-100
+]]
+
+local PowerSystem = {}
+
+local RECOVERY_PER_DIFFICULTY = {
+  Easy = 4,	
+  Awakening = 5,
+	Corruption = 6,
+	Domination = 8,
+	Extinction = 9,
+}
+local RECOVERY_INTERVAL = 120 -- seconds ("+X% / 2 min")
+
+local LOCKDOWN_RECOVERY = 7
+local LOCKDOWN_INTERVAL = 180 -- seconds ("+7% / 3 min")
+
+-- Systems that go offline in sequence as power drops. Order matters --
+-- this IS the cascade from the design doc:
+-- Generator B ignored -> power drops -> lights malfunction -> CCTV offline
+-- -> security doors malfunction -> animatronics harder to track.
+local CASCADE_THRESHOLDS = {
+	{ system = "Lights", threshold = 60 },
+	{ system = "CCTV", threshold = 35 },
+	{ system = "SecurityDoors", threshold = 15 },
+}
+
+local state = {
+	level = 100,
+	difficulty = "Easy",
+	electronicsActive = false,
+	lockdownActive = false,
+	recoveryAccumulator = 0,
+	failedSystems = {}, -- system name -> true
+}
+
+-- Callbacks other systems can hook. function(systemName, isFailed)
+PowerSystem.onSystemStatusChanged = nil
+-- function(newLevel, oldLevel)
+PowerSystem.onLevelChanged = nil
+
+-- ============================================================
+-- Setup
+-- ============================================================
+
+function PowerSystem.Init(difficulty)
+	state.level = 100
+	state.difficulty = difficulty or "Easy"
+	state.electronicsActive = false
+	state.lockdownActive = false
+	state.recoveryAccumulator = 0
+	state.failedSystems = {}
+end
+
+function PowerSystem.SetDifficulty(difficulty)
+	state.difficulty = difficulty
+end
+
+-- ============================================================
+-- Level control
+-- ============================================================
+
+function PowerSystem.GetLevel()
+	return state.level
+end
+
+function PowerSystem.SetLevel(newLevel)
+	local old = state.level
+	state.level = math.clamp(newLevel, 0, 100)
+
+	if state.level ~= old then
+		if PowerSystem.onLevelChanged then
+			PowerSystem.onLevelChanged(state.level, old)
+		end
+		PowerSystem._checkCascade()
+	end
+end
+
+function PowerSystem.Drain(amount)
+	PowerSystem.SetLevel(state.level - amount)
+end
+
+function PowerSystem.Charge(amount)
+	PowerSystem.SetLevel(state.level + amount)
+end
+
+-- ============================================================
+-- Electronics usage (affects passive recovery -- Section 9)
+-- ============================================================
+
+-- Call this whenever CCTV or another electronic system starts/stops being
+-- actively used. Passive recovery is paused while true.
+function PowerSystem.SetElectronicsActive(isActive)
+	state.electronicsActive = isActive
+end
+
+function PowerSystem.IsRecoveryActive()
+	return not state.electronicsActive and not state.lockdownActive
+end
+
+-- ============================================================
+-- Emergency CCTV lockdown (Section 8)
+-- ============================================================
+
+function PowerSystem.EnterLockdown()
+	state.lockdownActive = true
+	state.recoveryAccumulator = 0
+end
+
+function PowerSystem.ExitLockdown()
+	state.lockdownActive = false
+	state.recoveryAccumulator = 0
+end
+
+function PowerSystem.IsInLockdown()
+	return state.lockdownActive
+end
+
+-- ============================================================
+-- Per-frame update -- call from a Heartbeat connection server-side
+-- ============================================================
+
+function PowerSystem.Update(dt)
+	if state.lockdownActive then
+		state.recoveryAccumulator += dt
+		if state.recoveryAccumulator >= LOCKDOWN_INTERVAL then
+			state.recoveryAccumulator -= LOCKDOWN_INTERVAL
+			PowerSystem.Charge(LOCKDOWN_RECOVERY)
+		end
+		return
+	end
+
+	if state.electronicsActive then
+		-- No passive recovery while electronics are in active use.
+		state.recoveryAccumulator = 0
+		return
+	end
+
+	state.recoveryAccumulator += dt
+	if state.recoveryAccumulator >= RECOVERY_INTERVAL then
+		state.recoveryAccumulator -= RECOVERY_INTERVAL
+		local amount = RECOVERY_PER_DIFFICULTY[state.difficulty] or RECOVERY_PER_DIFFICULTY.Normal
+		PowerSystem.Charge(amount)
+	end
+end
+
+-- ============================================================
+-- Cascading failures (Section 10)
+-- ============================================================
+
+function PowerSystem._checkCascade()
+	for _, entry in ipairs(CASCADE_THRESHOLDS) do
+		local shouldBeFailed = state.level <= entry.threshold
+		local currentlyFailed = state.failedSystems[entry.system] == true
+
+		if shouldBeFailed and not currentlyFailed then
+			state.failedSystems[entry.system] = true
+			if PowerSystem.onSystemStatusChanged then
+				PowerSystem.onSystemStatusChanged(entry.system, true)
+			end
+		elseif not shouldBeFailed and currentlyFailed then
+			state.failedSystems[entry.system] = nil
+			if PowerSystem.onSystemStatusChanged then
+				PowerSystem.onSystemStatusChanged(entry.system, false)
+			end
+		end
+	end
+end
+
+function PowerSystem.IsSystemFailed(systemName)
+	return state.failedSystems[systemName] == true
+end
+
+return PowerSystem
