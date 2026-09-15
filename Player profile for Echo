@@ -139,6 +139,7 @@ function PlayerProfile.GetImitationQuality(player)
 	-- Simple curve: quality ramps up over ~5 minutes of observation,
 	-- capped at 0.9 so ECHO is never a flawless copy (design doc: "ECHO
 	-- should not be completely perfect").
+
 	local timeScore = math.clamp(p.observationTime / 300, 0, 1)
 	local dataScore = math.clamp(p.punctuationStyle.totalMessages / 15, 0, 1)
 
@@ -178,6 +179,7 @@ function PlayerProfile.PrefersLowercase(player)
 end
 
 -- Auto-cleanup when players leave.
+
 Players.PlayerRemoving:Connect(function(player)
 	PlayerProfile.StopTracking(player)
 end)
