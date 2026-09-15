@@ -39,6 +39,7 @@ function PlayerProfile.StartTracking(player)
 		observationTime = 0,
 
 		-- Communication fingerprint
+
 		commonPhrases = {},      -- phrase -> count
 		punctuationStyle = {
 			usesEllipses = 0,
@@ -48,12 +49,14 @@ function PlayerProfile.StartTracking(player)
 		},
 
 		-- Movement/behavior fingerprint
+
 		favoriteAreas = {},       -- areaName -> count
 		investigatesNoises = 0,   -- count of times player went to check a sound
 		staysWithGroup = 0,       -- count of times player was near teammates
 		staysAlone = 0,
 
 		-- Objective habits
+
 		favoriteObjective = {},   -- taskName -> count
 	}
 end
@@ -128,6 +131,7 @@ end
 
 -- Returns a 0-1 "how well can ECHO imitate this player" score.
 -- Longer observation + more data points = higher score.
+
 function PlayerProfile.GetImitationQuality(player)
 	local p = profiles[player.UserId]
 	if not p then return 0 end
