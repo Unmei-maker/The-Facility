@@ -1,0 +1,199 @@
+--[[
+	EchoAI.lua
+	ECHO: the adaptive impostor. Doesn't patrol a floor like the other
+	animatronics -- instead it lurks, observes players via PlayerProfile,
+	and periodically sends a FAKE radio/chat message pretending to be one
+	of them, claiming to be somewhere they aren't (design doc Section 5).
+
+	Usage:
+		local EchoAI = require(ReplicatedStorage.Modules.EchoAI)
+		local echo = EchoAI.new({ difficulty = "Nightmare" })
+		echo:Start()
+
+	Wire `echo.onFakeMessage` to your actual chat/radio system to display
+	the impersonated message to the team.
+]]
+
+local Players = game:GetService("Players")
+local PlayerProfile = require(script.Parent.PlayerProfile)
+
+local EchoAI = {}
+EchoAI.__index = EchoAI
+
+-- How ECHO's imitation error rate scales with difficulty. Lower = sneakier.
+-- This is the "tell" chance: probability the fake message contains a
+-- noticeable inconsistency a sharp player could catch.
+local BASE_TELL_CHANCE = {
+	Normal = 0.55,
+	Hard = 0.40,
+	Expert = 0.28,
+	Nightmare = 0.15,
+}
+
+-- Minimum/maximum seconds between ECHO impersonation attempts.
+local STRIKE_INTERVAL = {
+	Normal = { 240, 360 },
+	Hard = { 180, 300 },
+	Expert = { 120, 240 },
+	Nightmare = { 90, 180 },
+}
+
+local FAKE_LOCATION_POOL = {
+	"Generator B", "the CCTV room", "Ventilation Shaft 3", "the charging station",
+	"Storage Room A", "the east stairwell", "Floor 2 security checkpoint",
+}
+
+-- ============================================================
+-- Construction
+-- ============================================================
+
+function EchoAI.new(options)
+	options = options or {}
+
+	local self = setmetatable({}, EchoAI)
+
+	self.difficulty = options.difficulty or "Normal"
+	self._running = false
+	self._nextStrikeAt = 0
+	self._elapsed = 0
+
+	-- Callback: function(self, fakingPlayer, fakeMessage, hadTell)
+	-- Hook this up to your actual chat/radio broadcast system.
+	self.onFakeMessage = nil
+
+	return self
+end
+
+-- ============================================================
+-- Public control
+-- ============================================================
+
+function EchoAI:Start()
+	if self._running then return end
+	self._running = true
+	self:_scheduleNextStrike()
+
+	self._connection = game:GetService("RunService").Heartbeat:Connect(function(dt)
+		self:_update(dt)
+	end)
+end
+
+function EchoAI:Stop()
+	self._running = false
+	if self._connection then
+		self._connection:Disconnect()
+		self._connection = nil
+	end
+end
+
+function EchoAI:SetDifficulty(difficulty)
+	self.difficulty = difficulty
+end
+
+-- ============================================================
+-- Update loop
+-- ============================================================
+
+function EchoAI:_update(dt)
+	self._elapsed += dt
+
+	if self._elapsed >= self._nextStrikeAt then
+		self:_attemptImpersonation()
+		self:_scheduleNextStrike()
+	end
+end
+
+function EchoAI:_scheduleNextStrike()
+	local range = STRIKE_INTERVAL[self.difficulty] or STRIKE_INTERVAL.Normal
+	self._nextStrikeAt = self._elapsed + math.random(range[1], range[2])
+end
+
+-- ============================================================
+-- Impersonation logic
+-- ============================================================
+
+function EchoAI:_attemptImpersonation()
+	local target = self:_pickImpersonationTarget()
+	if not target then return end -- nobody observed enough yet
+
+	local quality = PlayerProfile.GetImitationQuality(target)
+	local tellChance = self:_getTellChance(quality)
+	local hadTell = math.random() < tellChance
+
+	local message = self:_buildFakeMessage(target, hadTell)
+
+	if self.onFakeMessage then
+		self.onFakeMessage(self, target, message, hadTell)
+	end
+end
+
+-- Pick whichever tracked player ECHO has observed long enough to fake
+-- convincingly. Prefers players who are currently alone (design doc implies
+-- ECHO exploits isolation -- harder for others to cross-check their story).
+function EchoAI:_pickImpersonationTarget()
+	local candidates = {}
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local profile = PlayerProfile.Get(player)
+		if profile and PlayerProfile.GetImitationQuality(player) > 0.3 then
+			table.insert(candidates, player)
+		end
+	end
+
+	if #candidates == 0 then return nil end
+	return candidates[math.random(1, #candidates)]
+end
+
+function EchoAI:_getTellChance(imitationQuality)
+	local base = BASE_TELL_CHANCE[self.difficulty] or BASE_TELL_CHANCE.Normal
+	-- Better-observed players are harder to catch faking -- reduce tell
+	-- chance further based on imitation quality (capped so it's never 0).
+	local reduced = base * (1 - imitationQuality * 0.5)
+	return math.clamp(reduced, 0.05, 1)
+end
+
+-- Builds the actual fake chat/radio line, using what ECHO has learned
+-- about the target's speech patterns. `hadTell` intentionally injects an
+-- inconsistency players could notice if paying attention.
+
+function EchoAI:_buildFakeMessage(targetPlayer, hadTell)
+	local fakeLocation = FAKE_LOCATION_POOL[math.random(1, #FAKE_LOCATION_POOL)]
+	local knownPhrase = PlayerProfile.GetMostCommonPhrase(targetPlayer)
+	local prefersLowercase = PlayerProfile.PrefersLowercase(targetPlayer)
+
+	local templates = {
+		"heading to %s now",
+		"I'm at %s, all clear",
+		"checking %s, give me a sec",
+		"just finished at %s",
+	}
+
+	local line = templates[math.random(1, #templates)]:format(fakeLocation)
+
+	-- Weave in the player's known common phrase sometimes, to sell it.
+
+	if knownPhrase and math.random() < 0.4 then
+		line = knownPhrase .. " -- " .. line
+	end
+
+	if prefersLowercase then
+		line = line:lower()
+	end
+
+	if hadTell then
+
+		-- Deliberate inconsistency: mismatched punctuation style is the
+		-- simplest, most game-detectable "tell" -- e.g. a player who never
+		-- uses exclamation points suddenly does, or vice versa.
+
+		line = line .. (prefersLowercase and "!" or "")
+	end
+
+	return {
+		speakerName = targetPlayer.Name,
+		text = line,
+		isFake = true, -- server-side only flag; never send this to clients!
+	}
+end
+
+return EchoAI
