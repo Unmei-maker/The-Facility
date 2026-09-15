@@ -1,0 +1,45 @@
+--[[
+	SpawnWarden.server.lua
+	Example of wiring up an animatronic using AnimatronicAI + AnimatronicConfig.
+
+	Setup expected in Studio:
+	- A Model named "WARDEN" somewhere in workspace (e.g. workspace.Animatronics.WARDEN)
+	  with a Humanoid and PrimaryPart set.
+	- A folder of Parts named "WardenPatrolPoints" marking patrol waypoints.
+
+	This script demonstrates WARDEN's specific personality on top of the
+	shared brain: it prioritizes cutting off exits over just chasing, per
+	the design doc.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local AnimatronicAI = require(ReplicatedStorage.Modules.AnimatronicAI)
+local AnimatronicConfig = require(ReplicatedStorage.Config.AnimatronicConfig)
+
+local wardenModel = workspace:WaitForChild("Animatronics"):WaitForChild("WARDEN")
+local patrolFolder = workspace:WaitForChild("WardenPatrolPoints")
+
+local patrolPoints = {}
+for _, part in ipairs(patrolFolder:GetChildren()) do
+	if part:IsA("BasePart") then
+		table.insert(patrolPoints, part.Position)
+	end
+end
+
+local warden = AnimatronicAI.new(wardenModel, AnimatronicConfig.WARDEN, patrolPoints)
+
+-- WARDEN-specific behavior: announce over the facility PA when it spots someone,
+-- and (as a stub) attempt to seal nearby security doors instead of just chasing.
+warden.onEnterChase = function(self, player)
+	print(("[WARDEN] Target acquired: %s"):format(player.Name))
+	-- TODO: fire a RemoteEvent to trigger door-sealing logic near the player.
+end
+
+warden.onLosePlayer = function(self)
+	print("[WARDEN] Lost visual. Switching to search.")
+end
+
+warden:Start()
+
+print("WARDEN AI initialized with", #patrolPoints, "patrol points.")
