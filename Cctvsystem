@@ -1,0 +1,91 @@
+--[[
+	CCTVSystem.lua
+	Handles CCTV usage (which drains recovery per PowerSystem), camera
+	failure simulation, and the emergency lockdown door (Sections 7-9).
+
+	This module is server-authoritative. Pair it with RemoteEvents (see
+	ServerScriptService/CCTVServer.server.lua) so clients can request
+	entering/exiting CCTV view and triggering lockdown.
+
+	Usage:
+		local CCTVSystem = require(ReplicatedStorage.Modules.CCTVSystem)
+		CCTVSystem.PlayerEnteredCCTV(player)
+		CCTVSystem.PlayerExitedCCTV(player)
+		CCTVSystem.TriggerLockdown(player)
+]]
+
+local PowerSystem = require(script.Parent.PowerSystem)
+
+local CCTVSystem = {}
+
+-- userId -> true, tracks who's currently viewing CCTV so we know when to
+-- flip PowerSystem.SetElectronicsActive back off (only when EVERYONE stops).
+local activeViewers = {}
+
+-- Callback: function(player) -- fire your door-closing animation/sound here.
+CCTVSystem.onLockdownEntered = nil
+CCTVSystem.onLockdownExited = nil
+CCTVSystem.onCameraFailure = nil -- function(cameraName)
+
+-- ============================================================
+-- Camera viewing
+-- ============================================================
+
+function CCTVSystem.PlayerEnteredCCTV(player)
+	activeViewers[player.UserId] = true
+	PowerSystem.SetElectronicsActive(true)
+end
+
+function CCTVSystem.PlayerExitedCCTV(player)
+	activeViewers[player.UserId] = nil
+
+	-- Only stop draining recovery once nobody is watching cameras.
+	if next(activeViewers) == nil then
+		PowerSystem.SetElectronicsActive(false)
+	end
+end
+
+function CCTVSystem.IsCameraOnline(cameraName)
+	-- Cameras go offline facility-wide once the CCTV system has cascaded
+	-- into failure (power too low), independent of any single camera issue.
+	if PowerSystem.IsSystemFailed("CCTV") then
+		return false
+	end
+	return true
+end
+
+-- Call periodically (e.g. every few seconds) with a chance to simulate a
+-- random camera dropping out -- interference, damage, etc. (Section 7).
+function CCTVSystem.RollForRandomFailure(cameraName, failureChance)
+	if math.random() < (failureChance or 0.02) then
+		if CCTVSystem.onCameraFailure then
+			CCTVSystem.onCameraFailure(cameraName)
+		end
+		return true
+	end
+	return false
+end
+
+-- ============================================================
+-- Emergency lockdown (Section 8)
+-- ============================================================
+
+function CCTVSystem.TriggerLockdown(player)
+	if PowerSystem.IsInLockdown() then return end
+
+	PowerSystem.EnterLockdown()
+	if CCTVSystem.onLockdownEntered then
+		CCTVSystem.onLockdownEntered(player)
+	end
+end
+
+function CCTVSystem.ReleaseLockdown(player)
+	if not PowerSystem.IsInLockdown() then return end
+
+	PowerSystem.ExitLockdown()
+	if CCTVSystem.onLockdownExited then
+		CCTVSystem.onLockdownExited(player)
+	end
+end
+
+return CCTVSystem
