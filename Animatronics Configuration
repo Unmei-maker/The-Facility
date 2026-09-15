@@ -34,7 +34,7 @@ AnimatronicConfig.WARDEN = {
 	intelligence = 10,      -- very high
 	learnsPlayerRoutes = true,
 	canControlDoors = true,
-  canSelfRepair = true,
+  	canSelfRepair = true,
 	prioritizesContainment = true, -- cuts off exits instead of just chasing
 }
 
@@ -47,6 +47,7 @@ AnimatronicConfig.WATCHER = {
 	visionAngle = 130,
 	hearingRange = 30,
 	intelligence = 8,
+	canSelfRepair = true,
 	weaknessSpeed = true,   -- players can outrun once detected early
 }
 
@@ -62,6 +63,7 @@ AnimatronicConfig.RAVEN = {
 	damageMultiplier = 2.0,
 	healthMultiplier = 3.0,
 	guardsAICore = true,
+	canSelfRepair = true,
 }
 
 -- ECHO is intentionally NOT in here with combat stats -- it has its own
