@@ -7,7 +7,7 @@
 
 	Usage:
 		local EchoAI = require(ReplicatedStorage.Modules.EchoAI)
-		local echo = EchoAI.new({ difficulty = "Nightmare" })
+		local echo = EchoAI.new({ difficulty = "Extinction" })
 		echo:Start()
 
 	Wire `echo.onFakeMessage` to your actual chat/radio system to display
@@ -32,10 +32,11 @@ local BASE_TELL_CHANCE = {
 
 -- Minimum/maximum seconds between ECHO impersonation attempts.
 local STRIKE_INTERVAL = {
-	Normal = { 240, 360 },
-	Hard = { 180, 300 },
-	Expert = { 120, 240 },
-	Nightmare = { 90, 180 },
+	Easy = { 300, 400 }
+	Awakening = { 240, 360 },
+	Corruption = { 180, 300 },
+	Domination = { 120, 240 },
+	Extinction = { 90, 180 },
 }
 
 local FAKE_LOCATION_POOL = {
