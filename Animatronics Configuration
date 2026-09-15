@@ -1,0 +1,78 @@
+--[[
+	AnimatronicConfig.lua
+	Central place to tune every animatronic's stats.
+	Put this in ReplicatedStorage/Config so both server AI and client UI
+	(e.g. CCTV threat readouts) can reference the same numbers.
+]]
+
+local AnimatronicConfig = {}
+
+-- Speed / Vision / Hearing are in "relative" units (0-10 scale) here.
+-- Convert to actual Roblox WalkSpeed / raycast distances inside the AI module.
+AnimatronicConfig.MILO = {
+	displayName = "MILO",
+	role = "Maintenance Unit",
+	walkSpeed = 10,        -- medium
+	runSpeed = 16,
+	visionRange = 40,       -- studs
+	visionAngle = 90,       -- degrees, field of view
+	hearingRange = 35,
+	intelligence = 8,       -- 0-10, affects search smartness
+	repairSpeed = 10,       -- very high
+	canSelfRepair = true,
+	aggroOnInterference = true, -- becomes hostile if players mess with its tasks
+}
+
+AnimatronicConfig.WARDEN = {
+	displayName = "WARDEN",
+	role = "Security Unit",
+	walkSpeed = 12,
+	runSpeed = 18,
+	visionRange = 55,
+	visionAngle = 110,
+	hearingRange = 50,
+	intelligence = 10,      -- very high
+	learnsPlayerRoutes = true,
+	canControlDoors = true,
+  canSelfRepair = true,
+	prioritizesContainment = true, -- cuts off exits instead of just chasing
+}
+
+AnimatronicConfig.WATCHER = {
+	displayName = "WATCHER",
+	role = "Surveillance/Hunter Unit",
+	walkSpeed = 6,          -- low
+	runSpeed = 8,
+	visionRange = 80,       -- extreme
+	visionAngle = 130,
+	hearingRange = 30,
+	intelligence = 8,
+	weaknessSpeed = true,   -- players can outrun once detected early
+}
+
+AnimatronicConfig.RAVEN = {
+	displayName = "RAVEN",
+	role = "Final Combat/Containment Unit",
+	walkSpeed = 14,
+	runSpeed = 22,
+	visionRange = 60,
+	visionAngle = 100,
+	hearingRange = 45,
+	intelligence = 9,
+	damageMultiplier = 2.0,
+	healthMultiplier = 3.0,
+	guardsAICore = true,
+}
+
+-- ECHO is intentionally NOT in here with combat stats -- it has its own
+-- behavior module (EchoAI.lua) since it doesn't patrol/chase like the others.
+
+-- Difficulty scalars applied on top of base stats above.
+AnimatronicConfig.DifficultyMultipliers = {
+	Normal    = { speed = 1.0, vision = 1.0, learningRate = 0.5, batteryRecovery = 0.05 },
+	Hard      = { speed = 1.1, vision = 1.05, learningRate = 0.75, batteryRecovery = 0.06 },
+	Expert    = { speed = 1.2, vision = 1.15, learningRate = 1.0, batteryRecovery = 0.08 },
+	Nightmare = { speed = 1.35, vision = 1.3, learningRate = 1.5, batteryRecovery = 0.09 },
+}
+
+return AnimatronicConfig
