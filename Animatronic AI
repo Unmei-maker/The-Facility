@@ -20,6 +20,7 @@
 local PathfindingService = game:GetService("PathfindingService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local ZoneManager = require(script.Parent.ZoneManager)
 
 local AnimatronicAI = {}
 AnimatronicAI.__index = AnimatronicAI
@@ -55,12 +56,14 @@ function AnimatronicAI.new(model, config, patrolPoints)
 
 	-- Memory used for the "learning" adaptation system (Section 6 of design doc).
 	-- Keyed by area name -> number of times players were seen/hid there.
+
 	self.memory = {
 		hidingSpotCounts = {},
 		routeCounts = {},
 	}
 
 	-- Optional callbacks a specific animatronic (e.g. WARDEN) can set.
+
 	self.onEnterChase = nil     -- function(self, target)
 	self.onLosePlayer = nil     -- function(self)
 	self.onInvestigate = nil    -- function(self, position)
@@ -72,7 +75,7 @@ end
 
 -- ============================================================
 -- Public control
-
+-- ============================================================
 
 function AnimatronicAI:Start()
 	if self._running then return end
@@ -98,6 +101,7 @@ end
 
 -- ============================================================
 -- Main update loop
+-- ============================================================
 
 function AnimatronicAI:_update(dt)
 	if not self.model.PrimaryPart then return end
@@ -130,6 +134,7 @@ end
 
 -- ============================================================
 -- Detection
+-- ============================================================
 
 function AnimatronicAI:_scanForPlayers()
 	local origin = self.model.PrimaryPart.Position
@@ -173,6 +178,7 @@ end
 
 -- ============================================================
 -- State behaviors
+-- ============================================================
 
 function AnimatronicAI:_doPatrol()
 	if #self.patrolPoints == 0 then return end
@@ -233,9 +239,9 @@ function AnimatronicAI:_doSearch(dt)
 	end
 end
 
--- ===============
+-- ============================================================
 -- Movement helper
-
+-- ============================================================
 
 -- Returns true once the model is "close enough" to targetPos.
 function AnimatronicAI:_moveTo(targetPos, speed)
@@ -252,10 +258,10 @@ end
 
 -- ============================================================
 -- Adaptive learning (Section 6: Adaptive AI)
+-- ============================================================
 
 -- Call this from elsewhere (e.g. a hiding-spot detector) whenever a player
 -- is found in a named area, so the AI can start prioritizing it later.
-
 function AnimatronicAI:RecordPlayerSeenInArea(areaName)
 	self.memory.hidingSpotCounts[areaName] = (self.memory.hidingSpotCounts[areaName] or 0) + 1
 end
@@ -271,9 +277,20 @@ function AnimatronicAI:GetMostLikelyHidingSpot()
 end
 
 function AnimatronicAI:_recordSearchLocation(position)
-	-- Placeholder hook: snap `position` to a named zone (via a zone lookup
-	-- table you define per-map) and call RecordPlayerSeenInArea on it.
-	-- Left as a hook because zone definitions are map-specific.
+	if not position then return end
+	local zoneName = ZoneManager.GetZoneAt(position)
+	if zoneName then
+		self:RecordPlayerSeenInArea(zoneName)
+	end
+end
+
+-- Returns true if `position` falls inside a zone this AI has learned to
+-- treat as a common hiding spot (seen 3+ times). Use this from _doPatrol
+-- to bias patrol routes toward known hiding spots on higher difficulties.
+function AnimatronicAI:IsKnownHidingSpot(position)
+	local zoneName = ZoneManager.GetZoneAt(position)
+	if not zoneName then return false end
+	return (self.memory.hidingSpotCounts[zoneName] or 0) >= 3
 end
 
 return AnimatronicAI
