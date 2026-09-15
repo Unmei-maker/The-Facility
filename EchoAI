@@ -23,11 +23,13 @@ EchoAI.__index = EchoAI
 -- How ECHO's imitation error rate scales with difficulty. Lower = sneakier.
 -- This is the "tell" chance: probability the fake message contains a
 -- noticeable inconsistency a sharp player could catch.
+
 local BASE_TELL_CHANCE = {
-	Normal = 0.55,
-	Hard = 0.40,
-	Expert = 0.28,
-	Nightmare = 0.15,
+	Easy = 0.70,
+	Awakening = 0.55,
+	Corruption = 0.40,
+	Domination = 0.28,
+	Extinction = 0.15,
 }
 
 -- Minimum/maximum seconds between ECHO impersonation attempts.
