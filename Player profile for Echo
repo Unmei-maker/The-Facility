@@ -1,0 +1,181 @@
+--[[
+	PlayerProfile.lua
+	Tracks what ECHO "learns" about each player over time.
+
+	This is deliberately separate from EchoAI.lua: the profiling is generic
+	data collection that could also feed other systems later (e.g. WARDEN's
+	route-learning), while EchoAI.lua is specifically about USING profiles
+	to impersonate someone.
+
+	Usage:
+		local PlayerProfile = require(ReplicatedStorage.Modules.PlayerProfile)
+		PlayerProfile.StartTracking(player)
+		PlayerProfile.RecordChatMessage(player, "on my way to generator b")
+		local profile = PlayerProfile.Get(player)
+]]
+
+local Players = game:GetService("Players")
+
+local PlayerProfile = {}
+
+-- profiles[userId] = { ... }
+local profiles = {}
+
+local FAVORITE_ROUTE_DECAY = 0.98 -- older route data slowly matters less
+
+-- ============================================================
+-- Setup
+-- ============================================================
+
+function PlayerProfile.StartTracking(player)
+	if profiles[player.UserId] then return end
+
+	profiles[player.UserId] = {
+		userId = player.UserId,
+		name = player.Name,
+
+		-- How long ECHO has been able to observe this player (seconds).
+		-- Longer observation = better impersonation (design doc Section 5).
+		observationTime = 0,
+
+		-- Communication fingerprint
+		commonPhrases = {},      -- phrase -> count
+		punctuationStyle = {
+			usesEllipses = 0,
+			usesExclamations = 0,
+			usesLowercaseOnly = 0,
+			totalMessages = 0,
+		},
+
+		-- Movement/behavior fingerprint
+		favoriteAreas = {},       -- areaName -> count
+		investigatesNoises = 0,   -- count of times player went to check a sound
+		staysWithGroup = 0,       -- count of times player was near teammates
+		staysAlone = 0,
+
+		-- Objective habits
+		favoriteObjective = {},   -- taskName -> count
+	}
+end
+
+function PlayerProfile.Get(player)
+	return profiles[player.UserId]
+end
+
+function PlayerProfile.StopTracking(player)
+	profiles[player.UserId] = nil
+end
+
+-- ============================================================
+-- Recording observations
+-- ============================================================
+
+function PlayerProfile.Tick(player, dt)
+	local p = profiles[player.UserId]
+	if not p then return end
+	p.observationTime += dt
+end
+
+function PlayerProfile.RecordChatMessage(player, message)
+	local p = profiles[player.UserId]
+	if not p then return end
+
+	local lower = message:lower()
+
+	p.commonPhrases[lower] = (p.commonPhrases[lower] or 0) + 1
+
+	local style = p.punctuationStyle
+	style.totalMessages += 1
+	if message:find("%.%.%.") then style.usesEllipses += 1 end
+	if message:find("!") then style.usesExclamations += 1 end
+	if message == lower and message:find("%a") then style.usesLowercaseOnly += 1 end
+end
+
+function PlayerProfile.RecordAreaVisited(player, areaName)
+	local p = profiles[player.UserId]
+	if not p then return end
+
+	for area in pairs(p.favoriteAreas) do
+		p.favoriteAreas[area] *= FAVORITE_ROUTE_DECAY
+	end
+	p.favoriteAreas[areaName] = (p.favoriteAreas[areaName] or 0) + 1
+end
+
+function PlayerProfile.RecordInvestigatedNoise(player)
+	local p = profiles[player.UserId]
+	if p then p.investigatesNoises += 1 end
+end
+
+function PlayerProfile.RecordGroupProximity(player, isWithGroup)
+	local p = profiles[player.UserId]
+	if not p then return end
+	if isWithGroup then
+		p.staysWithGroup += 1
+	else
+		p.staysAlone += 1
+	end
+end
+
+function PlayerProfile.RecordObjectiveWorkedOn(player, taskName)
+	local p = profiles[player.UserId]
+	if not p then return end
+	p.favoriteObjective[taskName] = (p.favoriteObjective[taskName] or 0) + 1
+end
+
+-- ============================================================
+-- Querying the profile (used by EchoAI to build a fake persona)
+-- ============================================================
+
+-- Returns a 0-1 "how well can ECHO imitate this player" score.
+-- Longer observation + more data points = higher score.
+function PlayerProfile.GetImitationQuality(player)
+	local p = profiles[player.UserId]
+	if not p then return 0 end
+
+	-- Simple curve: quality ramps up over ~5 minutes of observation,
+	-- capped at 0.9 so ECHO is never a flawless copy (design doc: "ECHO
+	-- should not be completely perfect").
+	local timeScore = math.clamp(p.observationTime / 300, 0, 1)
+	local dataScore = math.clamp(p.punctuationStyle.totalMessages / 15, 0, 1)
+
+	return math.min(0.9, (timeScore * 0.7) + (dataScore * 0.3))
+end
+
+function PlayerProfile.GetMostCommonPhrase(player)
+	local p = profiles[player.UserId]
+	if not p then return nil end
+
+	local best, bestCount = nil, 0
+	for phrase, count in pairs(p.commonPhrases) do
+		if count > bestCount then
+			best, bestCount = phrase, count
+		end
+	end
+	return best
+end
+
+function PlayerProfile.GetFavoriteArea(player)
+	local p = profiles[player.UserId]
+	if not p then return nil end
+
+	local best, bestCount = nil, 0
+	for area, count in pairs(p.favoriteAreas) do
+		if count > bestCount then
+			best, bestCount = area, count
+		end
+	end
+	return best
+end
+
+function PlayerProfile.PrefersLowercase(player)
+	local p = profiles[player.UserId]
+	if not p or p.punctuationStyle.totalMessages == 0 then return false end
+	return (p.punctuationStyle.usesLowercaseOnly / p.punctuationStyle.totalMessages) > 0.5
+end
+
+-- Auto-cleanup when players leave.
+Players.PlayerRemoving:Connect(function(player)
+	PlayerProfile.StopTracking(player)
+end)
+
+return PlayerProfile
