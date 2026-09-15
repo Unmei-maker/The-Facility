@@ -1,0 +1,279 @@
+--[[
+	AnimatronicAI.lua
+	Reusable state-machine "brain" for animatronics (MILO, WARDEN, WATCHER, RAVEN).
+
+	Usage (from a server Script in ServerScriptService):
+
+		local AnimatronicAI = require(game.ReplicatedStorage.Modules.AnimatronicAI)
+		local config = require(game.ReplicatedStorage.Config.AnimatronicConfig).WARDEN
+
+		local warden = AnimatronicAI.new(workspace.Animatronics.WARDEN, config)
+		warden:Start()
+
+	States: PATROL -> INVESTIGATE -> CHASE -> SEARCH -> (back to PATROL)
+
+	This module only handles movement/detection state. Combat, repair
+	behavior, and door interaction are hooked in via callbacks so each
+	animatronic can layer its own personality on top of the shared brain.
+]]
+
+local PathfindingService = game:GetService("PathfindingService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local AnimatronicAI = {}
+AnimatronicAI.__index = AnimatronicAI
+
+local STATE = {
+	PATROL = "PATROL",
+	INVESTIGATE = "INVESTIGATE",
+	CHASE = "CHASE",
+	SEARCH = "SEARCH",
+}
+AnimatronicAI.STATE = STATE
+
+-- ============================================================
+-- Construction
+-- ============================================================
+
+function AnimatronicAI.new(model, config, patrolPoints)
+	assert(model and model:IsA("Model"), "AnimatronicAI.new requires a Model")
+	assert(model.PrimaryPart, "Model must have a PrimaryPart set")
+
+	local self = setmetatable({}, AnimatronicAI)
+
+	self.model = model
+	self.humanoid = model:FindFirstChildOfClass("Humanoid")
+	self.config = config
+	self.patrolPoints = patrolPoints or {}
+	self.patrolIndex = 1
+
+	self.state = STATE.PATROL
+	self.lastKnownPlayerPos = nil
+	self.searchTimer = 0
+	self.searchDuration = 8 -- seconds spent searching last known position
+
+	-- Memory used for the "learning" adaptation system (Section 6 of design doc).
+	-- Keyed by area name -> number of times players were seen/hid there.
+	self.memory = {
+		hidingSpotCounts = {},
+		routeCounts = {},
+	}
+
+	-- Optional callbacks a specific animatronic (e.g. WARDEN) can set.
+	self.onEnterChase = nil     -- function(self, target)
+	self.onLosePlayer = nil     -- function(self)
+	self.onInvestigate = nil    -- function(self, position)
+
+	self._running = false
+
+	return self
+end
+
+-- ============================================================
+-- Public control
+
+
+function AnimatronicAI:Start()
+	if self._running then return end
+	self._running = true
+
+	self._connection = RunService.Heartbeat:Connect(function(dt)
+		self:_update(dt)
+	end)
+end
+
+function AnimatronicAI:Stop()
+	self._running = false
+	if self._connection then
+		self._connection:Disconnect()
+		self._connection = nil
+	end
+end
+
+function AnimatronicAI:SetState(newState)
+	if self.state == newState then return end
+	self.state = newState
+end
+
+-- ============================================================
+-- Main update loop
+
+function AnimatronicAI:_update(dt)
+	if not self.model.PrimaryPart then return end
+
+	local detectedPlayer = self:_scanForPlayers()
+
+	if detectedPlayer then
+		self.lastKnownPlayerPos = detectedPlayer.Character
+			and detectedPlayer.Character.PrimaryPart
+			and detectedPlayer.Character.PrimaryPart.Position
+
+		if self.state ~= STATE.CHASE then
+			self:SetState(STATE.CHASE)
+			if self.onEnterChase then
+				self.onEnterChase(self, detectedPlayer)
+			end
+		end
+	end
+
+	if self.state == STATE.PATROL then
+		self:_doPatrol()
+	elseif self.state == STATE.INVESTIGATE then
+		self:_doInvestigate()
+	elseif self.state == STATE.CHASE then
+		self:_doChase(detectedPlayer, dt)
+	elseif self.state == STATE.SEARCH then
+		self:_doSearch(dt)
+	end
+end
+
+-- ============================================================
+-- Detection
+
+function AnimatronicAI:_scanForPlayers()
+	local origin = self.model.PrimaryPart.Position
+	local lookVector = self.model.PrimaryPart.CFrame.LookVector
+	local visionRange = self.config.visionRange or 40
+	local visionAngle = self.config.visionAngle or 90
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+		if character and character.PrimaryPart then
+			local targetPos = character.PrimaryPart.Position
+			local distance = (targetPos - origin).Magnitude
+
+			if distance <= visionRange then
+				local direction = (targetPos - origin).Unit
+				local angle = math.deg(math.acos(lookVector:Dot(direction)))
+
+				if angle <= visionAngle / 2 then
+					if self:_hasLineOfSight(origin, targetPos, character) then
+						return player
+					end
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+function AnimatronicAI:_hasLineOfSight(origin, targetPos, ignoreCharacter)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { self.model, ignoreCharacter }
+
+	local direction = targetPos - origin
+	local result = workspace:Raycast(origin, direction, raycastParams)
+
+	-- If the ray hits something before reaching the target, vision is blocked.
+	return result == nil
+end
+
+-- ============================================================
+-- State behaviors
+
+function AnimatronicAI:_doPatrol()
+	if #self.patrolPoints == 0 then return end
+
+	local targetPoint = self.patrolPoints[self.patrolIndex]
+	local reached = self:_moveTo(targetPoint, self.config.walkSpeed)
+
+	if reached then
+		self.patrolIndex = (self.patrolIndex % #self.patrolPoints) + 1
+	end
+end
+
+function AnimatronicAI:_doInvestigate()
+	if not self.lastKnownPlayerPos then
+		self:SetState(STATE.PATROL)
+		return
+	end
+
+	if self.onInvestigate then
+		self.onInvestigate(self, self.lastKnownPlayerPos)
+	end
+
+	local reached = self:_moveTo(self.lastKnownPlayerPos, self.config.walkSpeed)
+	if reached then
+		self.searchTimer = 0
+		self:SetState(STATE.SEARCH)
+	end
+end
+
+function AnimatronicAI:_doChase(detectedPlayer, dt)
+	if not detectedPlayer then
+		-- Lost the player; remember where and start searching.
+		self.searchTimer = 0
+		self:SetState(STATE.SEARCH)
+		if self.onLosePlayer then
+			self.onLosePlayer(self)
+		end
+		return
+	end
+
+	local character = detectedPlayer.Character
+	if character and character.PrimaryPart then
+		self:_moveTo(character.PrimaryPart.Position, self.config.runSpeed)
+	end
+end
+
+function AnimatronicAI:_doSearch(dt)
+	self.searchTimer += dt
+
+	if self.lastKnownPlayerPos then
+		self:_moveTo(self.lastKnownPlayerPos, self.config.walkSpeed)
+	end
+
+	if self.searchTimer >= self.searchDuration then
+		-- Record this spot in memory -- feeds the adaptive learning system.
+		self:_recordSearchLocation(self.lastKnownPlayerPos)
+		self:SetState(STATE.PATROL)
+	end
+end
+
+-- ===============
+-- Movement helper
+
+
+-- Returns true once the model is "close enough" to targetPos.
+function AnimatronicAI:_moveTo(targetPos, speed)
+	if not self.humanoid then return true end
+
+	self.humanoid.WalkSpeed = speed or self.config.walkSpeed
+	self.humanoid:MoveTo(targetPos)
+
+	local currentPos = self.model.PrimaryPart.Position
+	local distance = (targetPos - currentPos).Magnitude
+
+	return distance <= 4 -- "arrived" threshold in studs
+end
+
+-- ============================================================
+-- Adaptive learning (Section 6: Adaptive AI)
+
+-- Call this from elsewhere (e.g. a hiding-spot detector) whenever a player
+-- is found in a named area, so the AI can start prioritizing it later.
+
+function AnimatronicAI:RecordPlayerSeenInArea(areaName)
+	self.memory.hidingSpotCounts[areaName] = (self.memory.hidingSpotCounts[areaName] or 0) + 1
+end
+
+function AnimatronicAI:GetMostLikelyHidingSpot()
+	local bestArea, bestCount = nil, 0
+	for area, count in pairs(self.memory.hidingSpotCounts) do
+		if count > bestCount then
+			bestArea, bestCount = area, count
+		end
+	end
+	return bestArea
+end
+
+function AnimatronicAI:_recordSearchLocation(position)
+	-- Placeholder hook: snap `position` to a named zone (via a zone lookup
+	-- table you define per-map) and call RecordPlayerSeenInArea on it.
+	-- Left as a hook because zone definitions are map-specific.
+end
+
+return AnimatronicAI
