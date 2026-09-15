@@ -70,11 +70,13 @@ AnimatronicConfig.RAVEN = {
 -- behavior module (EchoAI.lua) since it doesn't patrol/chase like the others.
 
 -- Difficulty scalars applied on top of base stats above.
+
 AnimatronicConfig.DifficultyMultipliers = {
-	Normal    = { speed = 1.0, vision = 1.0, learningRate = 0.5, batteryRecovery = 0.05 },
-	Hard      = { speed = 1.1, vision = 1.05, learningRate = 0.75, batteryRecovery = 0.06 },
-	Expert    = { speed = 1.2, vision = 1.15, learningRate = 1.0, batteryRecovery = 0.08 },
-	Nightmare = { speed = 1.35, vision = 1.3, learningRate = 1.5, batteryRecovery = 0.09 },
+	Easy	   = { speed = 0.95, vision = 0.81, learningRate = 0.3, batteryRecovery = 0.05 },
+	Awakening  = { speed = 1.0, vision = 1.0, learningRate = 0.5, batteryRecovery = 0.05 },
+	Corruption = { speed = 1.1, vision = 1.05, learningRate = 0.75, batteryRecovery = 0.06 },
+	Domination = { speed = 1.2, vision = 1.15, learningRate = 1.0, batteryRecovery = 0.08 },
+	Extinction = { speed = 1.35, vision = 1.3, learningRate = 1.5, batteryRecovery = 0.09 },
 }
 
 return AnimatronicConfig
