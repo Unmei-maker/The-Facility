@@ -25,20 +25,20 @@ EchoAI.__index = EchoAI
 -- noticeable inconsistency a sharp player could catch.
 
 local BASE_TELL_CHANCE = {
-	Easy = 0.70,
-	Awakening = 0.55,
-	Corruption = 0.40,
-	Domination = 0.28,
-	Extinction = 0.15,
+	Easy = 0.80,
+	Awakening = 0.50,
+	Corruption = 0.35,
+	Domination = 0.25,
+	Extinction = 0.13,
 }
 
 -- Minimum/maximum seconds between ECHO impersonation attempts.
 local STRIKE_INTERVAL = {
 	Easy = { 300, 400 }
-	Awakening = { 240, 360 },
-	Corruption = { 180, 300 },
-	Domination = { 120, 240 },
-	Extinction = { 90, 180 },
+	Awakening = { 200, 320 },
+	Corruption = { 140, 280 },
+	Domination = { 90, 200 },
+	Extinction = { 60, 100 },
 }
 
 local FAKE_LOCATION_POOL = {
@@ -148,7 +148,7 @@ function EchoAI:_pickImpersonationTarget()
 end
 
 function EchoAI:_getTellChance(imitationQuality)
-	local base = BASE_TELL_CHANCE[self.difficulty] or BASE_TELL_CHANCE.Normal
+	local base = BASE_TELL_CHANCE[self.difficulty] or BASE_TELL_CHANCE.Easy
 	-- Better-observed players are harder to catch faking -- reduce tell
 	-- chance further based on imitation quality (capped so it's never 0).
 	local reduced = base * (1 - imitationQuality * 0.5)
