@@ -1,0 +1,77 @@
+--[[
+	WeaponConfig.lua
+	Weapon level-unlock progression and ammo types per weapon category
+	(Sections 21-23). Premium ammo requires Robux to UNLOCK the type;
+	actual rounds are always bought with Facility Credits -- this
+	distinction matters for EconomySystem, so it's kept explicit here.
+]]
+
+local WeaponConfig = {}
+
+-- Free weapon progression by player level.
+WeaponConfig.LevelUnlocks = {
+	{ level = 1, weapon = "Pistol" },
+	{ level = 10, weapon = "Shotgun" },
+	{ level = 20, weapon = "SMG" },
+	{ level = 30, weapon = "AssaultRifle" },
+}
+
+-- Premium sidegrade weapons -- different handling/sound/reload, not
+-- strictly better than their free counterpart.
+WeaponConfig.PremiumSidegrades = {
+	AssaultRifle = "HK416", -- premium sidegrade of the free M4A1-equivalent
+}
+
+-- Ammo types per weapon category. `isPremium = true` means it must be
+-- unlocked with Robux first (see EconomySystem.UnlockPremiumAmmo); the
+-- actual rounds are still bought with Facility Credits either way.
+WeaponConfig.AmmoTypes = {
+	Pistol = {
+		{ id = "StandardBall", isPremium = false, effect = "baseline" },
+		{ id = "Lightweight", isPremium = false, unlockCost = "credits", effect = "sidegrade" },
+		{ id = "HollowPoint", isPremium = true, effect = "bonus_vs_exposed, penalty_vs_armored" },
+		{ id = "Incendiary", isPremium = true, effect = "temporary_heat" },
+	},
+	SMG = {
+		{ id = "StandardFMJ", isPremium = false, effect = "baseline" },
+		{ id = "Lightweight", isPremium = false, unlockCost = "credits", effect = "sidegrade" },
+		{ id = "ArmorPenetrating", isPremium = true, effect = "bonus_vs_armored" },
+		{ id = "ShockRound", isPremium = true, effect = "temporary_disrupt_movement" },
+	},
+	AssaultRifle = {
+		{ id = "StandardRifle", isPremium = false, effect = "baseline" },
+		{ id = "LightRifle", isPremium = false, unlockCost = "credits", effect = "sidegrade" },
+		{ id = "Penetrator", isPremium = true, effect = "bonus_vs_armored" },
+		{ id = "EMPRound", isPremium = true, effect = "temporary_disrupt_sensors" },
+	},
+	Shotgun = {
+		{ id = "Buckshot", isPremium = false, effect = "baseline" },
+		{ id = "LowPowerBuckshot", isPremium = false, unlockCost = "credits", effect = "sidegrade" },
+		{ id = "Slug", isPremium = true, effect = "tight_spread_precision" },
+		{ id = "Incendiary", isPremium = true, effect = "wide_spread_heat" },
+	},
+	SniperRifle = {
+		{ id = "StandardPrecision", isPremium = false, effect = "baseline" },
+		{ id = "LightPrecision", isPremium = false, unlockCost = "credits", effect = "sidegrade" },
+		{ id = "Penetrator", isPremium = true, effect = "bonus_vs_armored" },
+		{ id = "EMPRound", isPremium = true, effect = "disrupt_electronics" },
+	},
+	LMG = {
+		{ id = "StandardBelt", isPremium = false, effect = "baseline" },
+		{ id = "LightBelt", isPremium = false, unlockCost = "credits", effect = "sidegrade" },
+		{ id = "ArmorPenetratingBelt", isPremium = true, effect = "bonus_vs_armored" },
+		{ id = "IncendiaryBelt", isPremium = true, effect = "heat_effect" },
+	},
+}
+
+function WeaponConfig.GetUnlockedWeaponsForLevel(level)
+	local unlocked = {}
+	for _, entry in ipairs(WeaponConfig.LevelUnlocks) do
+		if level >= entry.level then
+			table.insert(unlocked, entry.weapon)
+		end
+	end
+	return unlocked
+end
+
+return WeaponConfig
