@@ -19,14 +19,14 @@ local PowerSystem = {}
 
 local RECOVERY_PER_DIFFICULTY = {
   Easy = 4,	
-  Awakening = 5,
-	Corruption = 6,
+  Awakening = 6,
+	Corruption = 7,
 	Domination = 8,
 	Extinction = 9,
 }
 local RECOVERY_INTERVAL = 120 -- seconds ("+X% / 2 min")
 
-local LOCKDOWN_RECOVERY = 7
+local LOCKDOWN_RECOVERY = 6
 local LOCKDOWN_INTERVAL = 180 -- seconds ("+7% / 3 min")
 
 -- Systems that go offline in sequence as power drops. Order matters --
@@ -34,9 +34,9 @@ local LOCKDOWN_INTERVAL = 180 -- seconds ("+7% / 3 min")
 -- Generator B ignored -> power drops -> lights malfunction -> CCTV offline
 -- -> security doors malfunction -> animatronics harder to track.
 local CASCADE_THRESHOLDS = {
-	{ system = "Lights", threshold = 60 },
-	{ system = "CCTV", threshold = 35 },
-	{ system = "SecurityDoors", threshold = 15 },
+	{ system = "Lights", threshold = 80 },
+	{ system = "CCTV", threshold = 45 },
+	{ system = "SecurityDoors", threshold = 20 },
 }
 
 local state = {
