@@ -1,0 +1,128 @@
+--[[
+	ClassSystem.lua
+	Generic ability activation + cooldown tracking for every subclass in
+	ClassConfig. Instead of one script per subclass, each ability's actual
+	effect is a small function registered in `EffectRegistry` below, keyed
+	by `effectId`. Adding a new ability = one ClassConfig entry + one
+	registry function.
+
+	Usage:
+		local ClassSystem = require(ReplicatedStorage.Modules.ClassSystem)
+		ClassSystem.SetPlayerSubclass(player, "Rifleman")
+		local ok, reason = ClassSystem.TryActivate(player, targetOrNil)
+]]
+
+local ClassConfig = require(script.Parent.Parent.Config.ClassConfig)
+
+local ClassSystem = {}
+
+-- userId -> subclassId
+local playerSubclasses = {}
+-- userId -> last activation timestamp (os.clock())
+local lastActivation = {}
+
+-- ============================================================
+-- Effect registry
+-- ============================================================
+-- Each function receives (player, target, abilityData) and performs the
+-- actual gameplay effect. `target` may be nil for self/AoE abilities.
+-- Only a representative handful are implemented below as real examples;
+-- the rest are safe no-op stubs so TryActivate never errors on an
+-- unimplemented ability -- fill these in as you build the surrounding
+-- systems (e.g. TargetLock needs a damage-multiplier hook into DamageSystem).
+
+local EffectRegistry = {}
+
+EffectRegistry.CombatFocus = function(player, target, abilityData)
+	-- TODO: hook into your weapon system's recoil/spread multiplier.
+	print(("[Ability] %s used Combat Focus"):format(player.Name))
+end
+
+EffectRegistry.EmergencyRevival = function(player, target, abilityData)
+	-- TODO: hook into ReviveSystem.Revive(target, { instant = true })
+	print(("[Ability] %s used Emergency Revival on %s"):format(
+		player.Name, target and target.Name or "?"))
+end
+
+EffectRegistry.EmergencyRepair = function(player, target, abilityData)
+	-- TODO: hook into a nearby DamageSystem instance's :Repair()
+	print(("[Ability] %s used Emergency Repair"):format(player.Name))
+end
+
+EffectRegistry.ThreatScan = function(player, target, abilityData)
+	-- TODO: query nearby AnimatronicAI instances, send positions to client via RemoteEvent.
+	print(("[Ability] %s used Threat Scan"):format(player.Name))
+end
+
+EffectRegistry.PowerSurge = function(player, target, abilityData)
+	-- TODO: hook into PowerSystem.Charge()
+	print(("[Ability] %s used Power Surge"):format(player.Name))
+end
+
+-- Fallback for any effectId without a specific handler yet.
+local function defaultEffect(player, target, abilityData)
+	print(("[Ability] %s used %s (effect not yet implemented)"):format(
+		player.Name, abilityData.abilityName))
+end
+
+-- ============================================================
+-- Subclass assignment
+-- ============================================================
+
+function ClassSystem.SetPlayerSubclass(player, subclassId)
+	if not ClassConfig.SubclassLookup[subclassId] then
+		warn("[ClassSystem] Unknown subclass: " .. tostring(subclassId))
+		return false
+	end
+	playerSubclasses[player.UserId] = subclassId
+	lastActivation[player.UserId] = nil
+	return true
+end
+
+function ClassSystem.GetPlayerSubclass(player)
+	return playerSubclasses[player.UserId]
+end
+
+function ClassSystem.GetAbilityData(player)
+	local subclassId = playerSubclasses[player.UserId]
+	if not subclassId then return nil end
+	return ClassConfig.SubclassLookup[subclassId]
+end
+
+-- ============================================================
+-- Activation
+-- ============================================================
+
+-- Returns true, nil on success, or false, reasonString on failure
+-- (e.g. "on cooldown", "no subclass selected").
+function ClassSystem.TryActivate(player, target)
+	local abilityData = ClassSystem.GetAbilityData(player)
+	if not abilityData then
+		return false, "No subclass selected."
+	end
+
+	local last = lastActivation[player.UserId]
+	local now = os.clock()
+
+	if last and (now - last) < abilityData.cooldown then
+		local remaining = math.ceil(abilityData.cooldown - (now - last))
+		return false, ("On cooldown (%ds remaining)."):format(remaining)
+	end
+
+	local handler = EffectRegistry[abilityData.effectId] or defaultEffect
+	handler(player, target, abilityData)
+
+	lastActivation[player.UserId] = now
+	return true, nil
+end
+
+function ClassSystem.GetCooldownRemaining(player)
+	local abilityData = ClassSystem.GetAbilityData(player)
+	local last = lastActivation[player.UserId]
+	if not abilityData or not last then return 0 end
+
+	local remaining = abilityData.cooldown - (os.clock() - last)
+	return math.max(0, remaining)
+end
+
+return ClassSystem
