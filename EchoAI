@@ -107,7 +107,7 @@ function EchoAI:_update(dt)
 end
 
 function EchoAI:_scheduleNextStrike()
-	local range = STRIKE_INTERVAL[self.difficulty] or STRIKE_INTERVAL.Normal
+	local range = STRIKE_INTERVAL[self.difficulty] or STRIKE_INTERVAL.Easy
 	self._nextStrikeAt = self._elapsed + math.random(range[1], range[2])
 end
 
