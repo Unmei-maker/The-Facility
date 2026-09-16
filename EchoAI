@@ -55,7 +55,7 @@ function EchoAI.new(options)
 
 	local self = setmetatable({}, EchoAI)
 
-	self.difficulty = options.difficulty or "Normal"
+	self.difficulty = options.difficulty or "Easy"
 	self._running = false
 	self._nextStrikeAt = 0
 	self._elapsed = 0
