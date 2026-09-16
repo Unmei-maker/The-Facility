@@ -1,0 +1,259 @@
+--[[
+	ClassConfig.lua
+	Data for every class/subclass and their ability (Sections 12-20).
+	This is intentionally DATA, not behavior -- ClassSystem.lua reads this
+	table and handles the generic activate/cooldown flow. Each ability's
+	actual gameplay EFFECT is implemented as a handler function registered
+	in ClassSystem's effect registry (see ClassSystem.lua), keyed by
+	`effectId` below. This keeps adding a new subclass to "add a config
+	entry + one small effect function" instead of a whole new script.
+]]
+
+local ClassConfig = {}
+
+ClassConfig.Classes = {
+	Assault = {
+		Rifleman = {
+			abilityName = "Combat Focus",
+			effectId = "CombatFocus",
+			cooldown = 30,
+			duration = 8,
+			description = "Temporarily improves weapon handling.",
+		},
+		Breacher = {
+			abilityName = "Breach Rush",
+			effectId = "BreachRush",
+			cooldown = 20,
+			duration = 3,
+			description = "Gains a short movement boost when entering combat.",
+		},
+		HeavyGunner = {
+			abilityName = "Suppressive Fire",
+			effectId = "SuppressiveFire",
+			cooldown = 25,
+			duration = 6,
+			description = "Reduces enemy movement speed while under fire.",
+		},
+		CombatSpecialist = {
+			abilityName = "Target Lock",
+			effectId = "TargetLock",
+			cooldown = 35,
+			duration = 10,
+			description = "Highlights a selected enemy and increases damage against it.",
+		},
+		-- Special (Robux) subclasses
+		Gunslinger = { abilityName = "TBD", effectId = "Gunslinger", cooldown = 30, duration = 6, description = "Special Assault subclass -- ability TBD." },
+		Vanguard = { abilityName = "TBD", effectId = "Vanguard", cooldown = 30, duration = 6, description = "Special Assault subclass -- ability TBD." },
+	},
+
+	Medic = {
+		FieldMedic = {
+			abilityName = "Emergency Revival",
+			effectId = "EmergencyRevival",
+			cooldown = 60,
+			duration = 0, -- instant
+			description = "Quickly revives a downed teammate.",
+		},
+		CombatMedic = {
+			abilityName = "Combat Stimulant",
+			effectId = "CombatStimulant",
+			cooldown = 30,
+			duration = 8,
+			description = "Temporarily increases a teammate's movement speed.",
+		},
+		MedicalEngineer = {
+			abilityName = "Healing Drone",
+			effectId = "HealingDrone",
+			cooldown = 45,
+			duration = 15,
+			description = "Deploys a drone that heals nearby allies.",
+		},
+		RescueSpecialist = {
+			abilityName = "Rapid Extraction",
+			effectId = "RapidExtraction",
+			cooldown = 40,
+			duration = 0,
+			description = "Quickly pulls a downed teammate to safety.",
+		},
+		TraumaSpecialist = { abilityName = "TBD", effectId = "TraumaSpecialist", cooldown = 40, duration = 8, description = "Special Medic subclass -- ability TBD." },
+		CombatSurgeon = { abilityName = "TBD", effectId = "CombatSurgeon", cooldown = 40, duration = 8, description = "Special Medic subclass -- ability TBD." },
+	},
+
+	Hacker = {
+		SystemHacker = {
+			abilityName = "System Override",
+			effectId = "SystemOverride",
+			cooldown = 40,
+			duration = 6,
+			description = "Temporarily disables nearby security systems.",
+		},
+		CyberwarfareSpecialist = {
+			abilityName = "Signal Jammer",
+			effectId = "SignalJammer",
+			cooldown = 35,
+			duration = 8,
+			description = "Temporarily interrupts nearby robot communications.",
+		},
+		AIAnalyst = {
+			abilityName = "Threat Analysis",
+			effectId = "ThreatAnalysis",
+			cooldown = 30,
+			duration = 12,
+			description = "Reveals enemy weaknesses and patrol routes.",
+		},
+		DroneHacker = {
+			abilityName = "Drone Override",
+			effectId = "DroneOverride",
+			cooldown = 50,
+			duration = 20,
+			description = "Temporarily converts a compatible enemy drone into an ally.",
+		},
+		AIManipulator = { abilityName = "TBD", effectId = "AIManipulator", cooldown = 40, duration = 8, description = "Special Hacker subclass -- ability TBD." },
+		GhostHacker = { abilityName = "TBD", effectId = "GhostHacker", cooldown = 40, duration = 8, description = "Special Hacker subclass -- ability TBD." },
+	},
+
+	Engineer = {
+		FieldEngineer = {
+			abilityName = "Emergency Repair",
+			effectId = "EmergencyRepair",
+			cooldown = 30,
+			duration = 0,
+			description = "Restores damaged equipment.",
+		},
+		CombatEngineer = {
+			abilityName = "Deployable Turret",
+			effectId = "DeployableTurret",
+			cooldown = 60,
+			duration = 30,
+			description = "Places an automated defensive turret.",
+		},
+		PowerSpecialist = {
+			abilityName = "Power Surge",
+			effectId = "PowerSurge",
+			cooldown = 45,
+			duration = 10,
+			description = "Temporarily restores disabled machinery.",
+		},
+		RoboticsSpecialist = {
+			abilityName = "Repair Drone",
+			effectId = "RepairDrone",
+			cooldown = 45,
+			duration = 15,
+			description = "Deploys a drone that repairs nearby friendly equipment.",
+		},
+		MasterMechanic = { abilityName = "TBD", effectId = "MasterMechanic", cooldown = 40, duration = 8, description = "Special Engineer subclass -- ability TBD." },
+		CombatMechanic = { abilityName = "TBD", effectId = "CombatMechanic", cooldown = 40, duration = 8, description = "Special Engineer subclass -- ability TBD." },
+	},
+
+	Recon = {
+		Scout = {
+			abilityName = "Threat Scan",
+			effectId = "ThreatScan",
+			cooldown = 25,
+			duration = 10,
+			description = "Reveals nearby hostile robots.",
+		},
+		Infiltrator = {
+			abilityName = "Optical Camouflage",
+			effectId = "OpticalCamouflage",
+			cooldown = 40,
+			duration = 6,
+			description = "Temporarily reduces enemy detection.",
+		},
+		Sniper = {
+			abilityName = "Precision Focus",
+			effectId = "PrecisionFocus",
+			cooldown = 25,
+			duration = 8,
+			description = "Improves accuracy against marked enemies.",
+		},
+		DroneOperator = {
+			abilityName = "Recon Drone",
+			effectId = "ReconDrone",
+			cooldown = 35,
+			duration = 20,
+			description = "Provides a remote view of nearby areas.",
+		},
+		GhostRecon = { abilityName = "TBD", effectId = "GhostRecon", cooldown = 40, duration = 8, description = "Special Recon subclass -- ability TBD." },
+		Hunter = { abilityName = "TBD", effectId = "Hunter", cooldown = 40, duration = 8, description = "Special Recon subclass -- ability TBD." },
+	},
+
+	Demolitionist = {
+		BreachingExpert = {
+			abilityName = "Controlled Breach",
+			effectId = "ControlledBreach",
+			cooldown = 45,
+			duration = 0,
+			description = "Opens designated sealed routes.",
+		},
+		OrdnanceSpecialist = {
+			abilityName = "Device Disarm",
+			effectId = "DeviceDisarm",
+			cooldown = 30,
+			duration = 0,
+			description = "Disables designated security devices.",
+		},
+		HeavyDemolitionist = {
+			abilityName = "Armor Breaker",
+			effectId = "ArmorBreaker",
+			cooldown = 30,
+			duration = 8,
+			description = "Deals increased damage to armored robots.",
+		},
+		EODSpecialist = {
+			abilityName = "Hazard Scanner",
+			effectId = "HazardScanner",
+			cooldown = 25,
+			duration = 12,
+			description = "Reveals dangerous environmental traps and hazards.",
+		},
+		Saboteur = { abilityName = "TBD", effectId = "Saboteur", cooldown = 40, duration = 8, description = "Special Demolitionist subclass -- ability TBD." },
+		SiegeSpecialist = { abilityName = "TBD", effectId = "SiegeSpecialist", cooldown = 40, duration = 8, description = "Special Demolitionist subclass -- ability TBD." },
+	},
+
+	-- Premium standalone class (Section 20)
+	Operative = {
+		CovertOperative = {
+			abilityName = "Ghost Step",
+			effectId = "GhostStep",
+			cooldown = 35,
+			duration = 6,
+			description = "Temporarily reduces detection while moving.",
+		},
+		FieldAgent = {
+			abilityName = "Adaptive Kit",
+			effectId = "AdaptiveKit",
+			cooldown = 40,
+			duration = 15,
+			description = "Temporarily gains a secondary utility function based on the current objective.",
+		},
+		CounterIntel = {
+			abilityName = "Signal Trace",
+			effectId = "SignalTrace",
+			cooldown = 30,
+			duration = 10,
+			description = "Reveals suspicious electronic activity and unusual AI behavior.",
+		},
+		Survivalist = {
+			abilityName = "Last Stand",
+			effectId = "LastStand",
+			cooldown = 50,
+			duration = 12,
+			description = "Temporarily improves mobility and defensive capability when isolated from teammates.",
+		},
+	},
+}
+
+-- Flat lookup: subclassId -> { className, ...abilityData }
+-- Built once at require-time so ClassSystem doesn't need nested iteration.
+ClassConfig.SubclassLookup = {}
+for className, subclasses in pairs(ClassConfig.Classes) do
+	for subclassId, data in pairs(subclasses) do
+		local entry = table.clone(data)
+		entry.className = className
+		entry.subclassId = subclassId
+		ClassConfig.SubclassLookup[subclassId] = entry
+	end
+end
+
+return ClassConfig
